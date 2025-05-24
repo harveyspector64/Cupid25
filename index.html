@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Cupid's Arrow</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        body {
+            font-family: 'Georgia', serif;
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 50%, #fecfef 100%);
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #gameCanvas {
+            display: block;
+            background: transparent;
+            touch-action: none;
+        }
+
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .ui-element {
+            position: absolute;
+            pointer-events: auto;
+        }
+
+        .score {
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px 25px;
+            border-radius: 25px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #d63384;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .level {
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px 25px;
+            border-radius: 25px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #d63384;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .arrows-left {
+            bottom: 100px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px 25px;
+            border-radius: 25px;
+            font-size: 16px;
+            color: #d63384;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .menu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            backdrop-filter: blur(10px);
+        }
+
+        .menu h1 {
+            color: #d63384;
+            font-size: 32px;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .menu button {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            margin: 10px;
+            border-radius: 25px;
+            font-size: 18px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .menu button:hover {
+            transform: translateY(-2px);
+        }
+
+        .wind-indicator {
+            top: 90px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .combo {
+            position: absolute;
+            font-size: 24px;
+            font-weight: bold;
+            color: #ff6b6b;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            pointer-events: none;
+            animation: comboFloat 2s ease-out forwards;
+        }
+
+        @keyframes comboFloat {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-50px) scale(1.2); opacity: 0; }
+        }
+
+        .instructions {
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 20px;
+            border-radius: 15px;
+            font-size: 14px;
+            color: #666;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div class="ui-overlay">
+        <div class="ui-element score" id="score">Score: 0</div>
+        <div class="ui-element level" id="level">Coffee Shop</div>
+        <div class="ui-element arrows-left" id="arrows">💘 Arrows: 15</div>
+        <div class="ui-element wind-indicator" id="wind">🌬️ Wind: None</div>
+        <div class="ui-element instructions" id="instructions">
+            Drag to aim, release to shoot! Match compatible hearts 💕
+        </div>
+        
+        <div class="menu" id="mainMenu">
+            <h1>💘 Cupid's Arrow</h1>
+            <p style="margin-bottom: 20px; color: #666;">Spread love through the power of perfect matches!</p>
+            <button onclick="startGame()">Start Game</button>
+            <button onclick="showInstructions()">How to Play</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Responsive canvas setup
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Game state
+        let gameState = 'menu';
+        let score = 0;
+        let level = 1;
+        let arrowsLeft = 15;
+        let combo = 0;
+        let people = [];
+        let arrows = [];
+        let particles = [];
+        let hearts = [];
+        let wind = { x: 0, y: 0 };
+        let cupidPos = { x: 0, y: 0 };
+        let isDragging = false;
+        let dragStart = { x: 0, y: 0 };
+        let aimLine = null;
+
+        // Settings for different environments
+        const environments = [
+            {
+                name: "Coffee Shop",
+                bg: "#8B4513",
+                peopleCount: 8,
+                personalityTypes: ['bookworm', 'artist', 'student', 'professional'],
+                ambientColor: "#D2B48C"
+            },
+            {
+                name: "Park",
+                bg: "#228B22",
+                peopleCount: 12,
+                personalityTypes: ['athletic', 'nature-lover', 'dog-owner', 'jogger'],
+                ambientColor: "#90EE90"
+            },
+            {
+                name: "Library",
+                bg: "#8B4513",
+                peopleCount: 6,
+                personalityTypes: ['intellectual', 'bookworm', 'student', 'researcher'],
+                ambientColor: "#F5DEB3"
+            },
+            {
+                name: "Dance Club",
+                bg: "#4B0082",
+                peopleCount: 15,
+                personalityTypes: ['dancer', 'party-goer', 'musician', 'social'],
+                ambientColor: "#9370DB"
+            }
+        ];
+
+        // Personality compatibility matrix
+        const compatibility = {
+            'bookworm': ['intellectual', 'student', 'artist'],
+            'artist': ['bookworm', 'musician', 'nature-lover'],
+            'student': ['bookworm', 'intellectual', 'professional'],
+            'professional': ['student', 'intellectual', 'social'],
+            'athletic': ['jogger', 'nature-lover', 'dancer'],
+            'nature-lover': ['athletic', 'dog-owner', 'artist'],
+            'dog-owner': ['nature-lover', 'athletic', 'social'],
+            'jogger': ['athletic', 'nature-lover', 'dancer'],
+            'intellectual': ['bookworm', 'student', 'researcher'],
+            'researcher': ['intellectual', 'bookworm', 'professional'],
+            'dancer': ['party-goer', 'musician', 'athletic'],
+            'party-goer': ['dancer', 'social', 'musician'],
+            'musician': ['artist', 'dancer', 'party-goer'],
+            'social': ['party-goer', 'professional', 'dog-owner']
+        };
+
+        // Person class
+        class Person {
+            constructor(x, y, personality) {
+                this.x = x;
+                this.y = y;
+                this.personality = personality;
+                this.size = 25;
+                this.speed = 0.5 + Math.random() * 0.5;
+                this.direction = Math.random() * Math.PI * 2;
+                this.color = this.getPersonalityColor();
+                this.inLove = false;
+                this.loveTarget = null;
+                this.moveTimer = 0;
+                this.bounceOffset = Math.random() * Math.PI * 2;
+                this.traits = this.generateTraits();
+                this.socialRadius = 80;
+                this.happiness = 0.5;
+                this.lastDirectionChange = 0;
+            }
+
+            generateTraits() {
+                const traitSets = {
+                    'bookworm': ['📚', '☕', '🤓'],
+                    'artist': ['🎨', '✨', '🌟'],
+                    'student': ['📝', '🎓', '💭'],
+                    'professional': ['💼', '⌚', '📱'],
+                    'athletic': ['💪', '🏃‍♀️', '⚽'],
+                    'nature-lover': ['🌿', '🌺', '🦋'],
+                    'dog-owner': ['🐕', '❤️', '🦴'],
+                    'jogger': ['👟', '🏃‍♂️', '💨'],
+                    'intellectual': ['🧠', '📖', '🔬'],
+                    'researcher': ['🔬', '📊', '💡'],
+                    'dancer': ['💃', '🎵', '✨'],
+                    'party-goer': ['🎉', '🍾', '🕺'],
+                    'musician': ['🎵', '🎸', '🎤'],
+                    'social': ['😊', '💬', '👥']
+                };
+                return traitSets[this.personality] || ['❤️', '😊', '✨'];
+            }
+
+            getPersonalityColor() {
+                const colors = {
+                    'bookworm': '#8B4513',
+                    'artist': '#FF69B4',
+                    'student': '#4169E1',
+                    'professional': '#2F4F4F',
+                    'athletic': '#FF4500',
+                    'nature-lover': '#32CD32',
+                    'dog-owner': '#DEB887',
+                    'jogger': '#FF6347',
+                    'intellectual': '#4B0082',
+                    'researcher': '#708090',
+                    'dancer': '#FF1493',
+                    'party-goer': '#FFD700',
+                    'musician': '#9370DB',
+                    'social': '#FF69B4'
+                };
+                return colors[this.personality] || '#FF69B4';
+            }
+
+            update() {
+                if (this.inLove && this.loveTarget) {
+                    // Move towards love target
+                    const dx = this.loveTarget.x - this.x;
+                    const dy = this.loveTarget.y - this.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance > 40) {
+                        this.x += (dx / distance) * this.speed * 2;
+                        this.y += (dy / distance) * this.speed * 2;
+                    }
+                } else {
+                    // Random movement with social awareness
+                    this.moveTimer += 1;
+                    if (this.moveTimer > 120 + Math.random() * 120) {
+                        this.direction = Math.random() * Math.PI * 2;
+                        this.moveTimer = 0;
+                    }
+                    
+                    // Social spacing - avoid crowding
+                    let socialForceX = 0;
+                    let socialForceY = 0;
+                    
+                    people.forEach(other => {
+                        if (other !== this) {
+                            const dx = this.x - other.x;
+                            const dy = this.y - other.y;
+                            const distance = Math.sqrt(dx * dx + dy * dy);
+                            
+                            if (distance < this.socialRadius && distance > 0) {
+                                const force = (this.socialRadius - distance) / this.socialRadius;
+                                socialForceX += (dx / distance) * force * 0.5;
+                                socialForceY += (dy / distance) * force * 0.5;
+                            }
+                        }
+                    });
+                    
+                    this.x += Math.cos(this.direction) * this.speed + socialForceX;
+                    this.y += Math.sin(this.direction) * this.speed + socialForceY;
+                }
+                
+                // Bounce off walls
+                if (this.x < this.size || this.x > canvas.width - this.size) {
+                    this.direction = Math.PI - this.direction;
+                }
+                if (this.y < this.size || this.y > canvas.height - this.size) {
+                    this.direction = -this.direction;
+                }
+                
+                this.x = Math.max(this.size, Math.min(canvas.width - this.size, this.x));
+                this.y = Math.max(this.size, Math.min(canvas.height - this.size, this.y));
+                
+                this.bounceOffset += 0.05;
+            }
+
+            draw() {
+                ctx.save();
+                
+                // Glow effect for happy people
+                if (this.inLove) {
+                    ctx.shadowBlur = 20;
+                    ctx.shadowColor = '#FFB6C1';
+                }
+                
+                // Person body
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y + Math.sin(this.bounceOffset) * 3, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Face
+                ctx.fillStyle = '#FDBCB4';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y - 5 + Math.sin(this.bounceOffset) * 3, this.size * 0.7, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Eyes
+                if (this.inLove) {
+                    // Heart eyes
+                    ctx.fillStyle = '#FF69B4';
+                    ctx.font = '12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('💕', this.x, this.y - 3 + Math.sin(this.bounceOffset) * 3);
+                } else {
+                    // Normal eyes
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(this.x - 6, this.y - 8 + Math.sin(this.bounceOffset) * 3, 2, 0, Math.PI * 2);
+                    ctx.arc(this.x + 6, this.y - 8 + Math.sin(this.bounceOffset) * 3, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                // Personality indicator
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(this.traits[0], this.x, this.y - 35 + Math.sin(this.bounceOffset) * 3);
+                
+                // Connection line to love target
+                if (this.inLove && this.loveTarget) {
+                    ctx.strokeStyle = '#FFB6C1';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([5, 5]);
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(this.loveTarget.x, this.loveTarget.y);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+                
+                ctx.restore();
+            }
+
+            isCompatibleWith(other) {
+                return compatibility[this.personality] && 
+                       compatibility[this.personality].includes(other.personality);
+            }
+        }
+
+        // Arrow class
+        class Arrow {
+            constructor(x, y, dx, dy) {
+                this.x = x;
+                this.y = y;
+                this.dx = dx;
+                this.dy = dy;
+                this.speed = 8;
+                this.gravity = 0.1;
+                this.life = 180;
+                this.trail = [];
+                this.hasHit = false;
+            }
+
+            update() {
+                this.trail.push({ x: this.x, y: this.y });
+                if (this.trail.length > 10) this.trail.shift();
+                
+                this.dx += wind.x * 0.02;
+                this.dy += wind.y * 0.02 + this.gravity;
+                
+                this.x += this.dx;
+                this.y += this.dy;
+                
+                this.life--;
+                
+                // Check collision with people
+                if (!this.hasHit) {
+                    people.forEach(person => {
+                        const distance = Math.sqrt(
+                            (this.x - person.x) ** 2 + (this.y - person.y) ** 2
+                        );
+                        
+                        if (distance < person.size) {
+                            this.hitPerson(person);
+                        }
+                    });
+                }
+                
+                return this.life > 0 && this.x > -50 && this.x < canvas.width + 50 && 
+                       this.y > -50 && this.y < canvas.height + 50;
+            }
+
+            hitPerson(person) {
+                if (this.hasHit) return;
+                this.hasHit = true;
+                
+                // Create hit particles
+                for (let i = 0; i < 10; i++) {
+                    particles.push(new Particle(
+                        person.x + (Math.random() - 0.5) * 20,
+                        person.y + (Math.random() - 0.5) * 20,
+                        (Math.random() - 0.5) * 4,
+                        (Math.random() - 0.5) * 4,
+                        '#FFB6C1',
+                        60
+                    ));
+                }
+                
+                // Find compatible partner
+                const availablePeople = people.filter(p => 
+                    p !== person && 
+                    !p.inLove && 
+                    person.isCompatibleWith(p)
+                );
+                
+                if (availablePeople.length > 0) {
+                    // Find closest compatible person
+                    let closestPerson = availablePeople[0];
+                    let closestDistance = Math.sqrt(
+                        (person.x - closestPerson.x) ** 2 + (person.y - closestPerson.y) ** 2
+                    );
+                    
+                    availablePeople.forEach(p => {
+                        const distance = Math.sqrt(
+                            (person.x - p.x) ** 2 + (person.y - p.y) ** 2
+                        );
+                        if (distance < closestDistance) {
+                            closestDistance = distance;
+                            closestPerson = p;
+                        }
+                    });
+                    
+                    // Create love connection
+                    person.inLove = true;
+                    person.loveTarget = closestPerson;
+                    closestPerson.inLove = true;
+                    closestPerson.loveTarget = person;
+                    
+                    // Score calculation
+                    let points = 100;
+                    if (closestDistance < 100) points += 50; // Proximity bonus
+                    points += combo * 25; // Combo multiplier
+                    
+                    score += points;
+                    combo++;
+                    
+                    // Create floating hearts
+                    for (let i = 0; i < 5; i++) {
+                        hearts.push(new Heart(
+                            (person.x + closestPerson.x) / 2,
+                            (person.y + closestPerson.y) / 2
+                        ));
+                    }
+                    
+                    // Show combo text
+                    if (combo > 1) {
+                        showCombo(combo, (person.x + closestPerson.x) / 2, (person.y + closestPerson.y) / 2);
+                    }
+                    
+                    // Play success sound (placeholder)
+                    playMatchSound();
+                    
+                } else {
+                    // No compatible partner - small penalty
+                    score = Math.max(0, score - 25);
+                    combo = 0;
+                    
+                    // Show miss effect
+                    particles.push(new Particle(
+                        person.x, person.y, 0, -2, '#999', 30
+                    ));
+                }
+                
+                updateUI();
+            }
+
+            draw() {
+                ctx.save();
+                
+                // Trail
+                ctx.strokeStyle = 'rgba(255, 182, 193, 0.6)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                for (let i = 1; i < this.trail.length; i++) {
+                    const alpha = i / this.trail.length;
+                    ctx.globalAlpha = alpha * 0.5;
+                    ctx.moveTo(this.trail[i-1].x, this.trail[i-1].y);
+                    ctx.lineTo(this.trail[i].x, this.trail[i].y);
+                    ctx.stroke();
+                }
+                ctx.globalAlpha = 1;
+                
+                // Arrow
+                const angle = Math.atan2(this.dy, this.dx);
+                ctx.translate(this.x, this.y);
+                ctx.rotate(angle);
+                
+                // Arrow shaft
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(-15, -2, 20, 4);
+                
+                // Arrow head
+                ctx.fillStyle = '#C0C0C0';
+                ctx.beginPath();
+                ctx.moveTo(5, 0);
+                ctx.lineTo(-5, -5);
+                ctx.lineTo(-5, 5);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Arrow feathers
+                ctx.fillStyle = '#FF69B4';
+                ctx.beginPath();
+                ctx.moveTo(-15, -3);
+                ctx.lineTo(-20, -1);
+                ctx.lineTo(-20, 1);
+                ctx.lineTo(-15, 3);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.restore();
+            }
+        }
+
+        // Particle class for effects
+        class Particle {
+            constructor(x, y, dx, dy, color, life) {
+                this.x = x;
+                this.y = y;
+                this.dx = dx;
+                this.dy = dy;
+                this.color = color;
+                this.life = life;
+                this.maxLife = life;
+                this.size = Math.random() * 4 + 2;
+            }
+
+            update() {
+                this.x += this.dx;
+                this.y += this.dy;
+                this.dy += 0.1;
+                this.life--;
+                return this.life > 0;
+            }
+
+            draw() {
+                const alpha = this.life / this.maxLife;
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // Heart class for love effects
+        class Heart {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.dy = -1 - Math.random();
+                this.dx = (Math.random() - 0.5) * 2;
+                this.life = 120;
+                this.maxLife = 120;
+                this.size = Math.random() * 10 + 10;
+                this.rotation = Math.random() * Math.PI * 2;
+                this.rotationSpeed = (Math.random() - 0.5) * 0.1;
+            }
+
+            update() {
+                this.x += this.dx;
+                this.y += this.dy;
+                this.rotation += this.rotationSpeed;
+                this.life--;
+                return this.life > 0;
+            }
+
+            draw() {
+                const alpha = this.life / this.maxLife;
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                ctx.font = `${this.size}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('💕', 0, 0);
+                ctx.restore();
+            }
+        }
+
+        // Game functions
+        function initGame() {
+            people = [];
+            arrows = [];
+            particles = [];
+            hearts = [];
+            
+            const env = environments[(level - 1) % environments.length];
+            
+            // Generate people with personalities
+            for (let i = 0; i < env.peopleCount; i++) {
+                const personality = env.personalityTypes[Math.floor(Math.random() * env.personalityTypes.length)];
+                const person = new Person(
+                    Math.random() * (canvas.width - 100) + 50,
+                    Math.random() * (canvas.height - 100) + 50,
+                    personality
+                );
+                people.push(person);
+            }
+            
+            // Set Cupid position
+            cupidPos.x = 50;
+            cupidPos.y = canvas.height - 100;
+            
+            // Generate wind
+            wind.x = (Math.random() - 0.5) * 2;
+            wind.y = (Math.random() - 0.5) * 0.5;
+            
+            updateUI();
+        }
+
+        function updateUI() {
+            document.getElementById('score').textContent = `Score: ${score}`;
+            document.getElementById('level').textContent = environments[(level - 1) % environments.length].name;
+            document.getElementById('arrows').innerHTML = `💘 Arrows: ${arrowsLeft}`;
+            
+            let windText = '🌬️ Wind: ';
+            if (Math.abs(wind.x) < 0.2 && Math.abs(wind.y) < 0.2) {
+                windText += 'Calm';
+            } else {
+                if (wind.x > 0.5) windText += 'East ';
+                else if (wind.x < -0.5) windText += 'West ';
+                if (wind.y > 0.3) windText += 'Down';
+                else if (wind.y < -0.3) windText += 'Up';
+            }
+            document.getElementById('wind').textContent = windText;
+        }
+
+        function showCombo(comboCount, x, y) {
+            const comboElement = document.createElement('div');
+            comboElement.className = 'combo';
+            comboElement.textContent = `${comboCount}x COMBO!`;
+            comboElement.style.left = x + 'px';
+            comboElement.style.top = y + 'px';
+            document.body.appendChild(comboElement);
+            
+            setTimeout(() => {
+                document.body.removeChild(comboElement);
+            }, 2000);
+        }
+
+        function playMatchSound() {
+            // Create audio context for sound effects
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                
+                oscillator.connect(gain);
+                gain.connect(audioContext.destination);
+                
+                oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.3);
+                
+                gain.gain.setValueAtTime(0.1, audioContext.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.3);
+            } catch (e) {
+                // Fallback if audio context fails
+                console.log('Match!');
+            }
+        }
+
+        function checkLevelComplete() {
+            const couplesCount = people.filter(p => p.inLove).length / 2;
+            const totalPeople = people.length;
+            
+            if (couplesCount >= totalPeople * 0.6) { // 60% coupled
+                level++;
+                arrowsLeft = 15;
+                score += 500; // Level bonus
+                setTimeout(() => {
+                    initGame();
+                }, 2000);
+                
+                // Show level complete message
+                showCombo('LEVEL COMPLETE!', canvas.width / 2, canvas.height / 2);
+            } else if (arrowsLeft <= 0 && arrows.length === 0) {
+                // Game over
+                gameState = 'gameOver';
+                setTimeout(() => {
+                    alert(`Game Over! Final Score: ${score}`);
+                    gameState = 'menu';
+                    document.getElementById('mainMenu').style.display = 'block';
+                }, 1000);
+            }
+        }
+
+        // Input handling
+        let touchStartX, touchStartY;
+
+        function getEventPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            if (e.touches) {
+                return {
+                    x: e.touches[0].clientX - rect.left,
+                    y: e.touches[0].clientY - rect.top
+                };
+            }
+            return {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        }
+
+        canvas.addEventListener('mousedown', startAiming);
+        canvas.addEventListener('touchstart', startAiming, { passive: false });
+
+        canvas.addEventListener('mousemove', updateAim);
+        canvas.addEventListener('touchmove', updateAim, { passive: false });
+
+        canvas.addEventListener('mouseup', shoot);
+        canvas.addEventListener('touchend', shoot);
+
+        function startAiming(e) {
+            e.preventDefault();
+            if (gameState !== 'playing' || arrowsLeft <= 0) return;
+            
+            const pos = getEventPos(e);
+            isDragging = true;
+            dragStart.x = pos.x;
+            dragStart.y = pos.y;
+        }
+
+        function updateAim(e) {
+            e.preventDefault();
+            if (!isDragging || gameState !== 'playing') return;
+            
+            const pos = getEventPos(e);
+            aimLine = {
+                startX: cupidPos.x,
+                startY: cupidPos.y,
+                endX: pos.x,
+                endY: pos.y
+            };
+        }
+
+        function shoot(e) {
+            e.preventDefault();
+            if (!isDragging || gameState !== 'playing' || arrowsLeft <= 0) return;
+            
+            const pos = getEventPos(e);
+            const dx = (pos.x - cupidPos.x) * 0.1;
+            const dy = (pos.y - cupidPos.y) * 0.1;
+            
+            arrows.push(new Arrow(cupidPos.x, cupidPos.y, dx, dy));
+            arrowsLeft--;
+            
+            isDragging = false;
+            aimLine = null;
+            updateUI();
+        }
+
+        // Game loop
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (gameState === 'playing') {
+                // Update game objects
+                people.forEach(person => person.update());
+                arrows = arrows.filter(arrow => arrow.update());
+                particles = particles.filter(particle => particle.update());
+                hearts = hearts.filter(heart => heart.update());
+                
+                // Draw environment background
+                const env = environments[(level - 1) % environments.length];
+                ctx.fillStyle = env.ambientColor + '20';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw people
+                people.forEach(person => person.draw());
+                
+                // Draw arrows
+                arrows.forEach(arrow => arrow.draw());
+                
+                // Draw particles
+                particles.forEach(particle => particle.draw());
+                
+                // Draw hearts
+                hearts.forEach(heart => heart.draw());
+                
+                // Draw Cupid
+                ctx.fillStyle = '#FFB6C1';
+                ctx.beginPath();
+                ctx.arc(cupidPos.x, cupidPos.y, 20, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.font = '24px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('😇', cupidPos.x, cupidPos.y + 8);
+                
+                // Draw aim line
+                if (aimLine) {
+                    ctx.strokeStyle = 'rgba(255, 105, 180, 0.7)';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([10, 5]);
+                    ctx.beginPath();
+                    ctx.moveTo(aimLine.startX, aimLine.startY);
+                    ctx.lineTo(aimLine.endX, aimLine.endY);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    // Power indicator
+                    const distance = Math.sqrt(
+                        (aimLine.endX - aimLine.startX) ** 2 + (aimLine.endY - aimLine.startY) ** 2
+                    );
+                    const power = Math.min(distance / 200, 1);
+                    
+                    ctx.fillStyle = `hsl(${(1-power) * 120}, 100%, 50%)`;
+                    ctx.fillRect(cupidPos.x - 30, cupidPos.y - 40, 60 * power, 8);
+                    ctx.strokeStyle = '#333';
+                    ctx.strokeRect(cupidPos.x - 30, cupidPos.y - 40, 60, 8);
+                }
+                
+                // Check level completion
+                checkLevelComplete();
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Menu functions
+        function startGame() {
+            gameState = 'playing';
+            score = 0;
+            level = 1;
+            arrowsLeft = 15;
+            combo = 0;
+            document.getElementById('mainMenu').style.display = 'none';
+            initGame();
+        }
+
+        function showInstructions() {
+            alert(`How to Play Cupid's Arrow:
+
+🏹 Drag from Cupid to aim, release to shoot arrows
+💕 Match people with compatible personalities 
+🌟 Traits shown above each person indicate compatibility
+⭐ Closer matches give bonus points
+🔥 Chain matches for combo multipliers
+🌬️ Watch out for wind affecting arrow flight
+💘 Complete levels by matching 60% of people
+🎯 Use arrows wisely - you have limited shots!
+
+Good luck spreading love! 💖`);
+        }
+
+        // Start the game
+        gameLoop();
+    </script>
+</body>
+</html>
